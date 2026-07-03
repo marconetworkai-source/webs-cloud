@@ -1,0 +1,17 @@
+{
+  "airtable": {
+    "baseId": "appyPijFKP05w6n2J",
+    "tables": {
+      "leads": {
+        "tableId": "tbl8hOlZzU6BGF6Ai",
+        "fieldIds": {
+          "Teléfono": "fldkvAaBPOkMcyM36",
+          "Estado": "fldy8mQJxKm8nNjBD"
+        }
+      },
+      "proyectos": {
+        "tableId": "tblQFU5D40wtU9wMy"
+      }
+    }
+  }
+}
