@@ -1,0 +1,17 @@
+# Entornos y cachés de Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Secretos — NUNCA subir el token
+.env
+
+# Salidas de ejecución (se regeneran en cada run)
+logs/
+
+# Estado persistente local del scraper (checkpoint, dedup, perfil del navegador)
+state/
+browser_profile/
+.scrapling/

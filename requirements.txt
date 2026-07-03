@@ -1,0 +1,6 @@
+# Pipeline de prospección — dependencias
+# Instalación (en la máquina que ejecuta el scraper, NO en este entorno cloud):
+#   pip install -r requirements.txt
+#   scrapling install        # descarga el navegador stealth (Camoufox) de Scrapling
+scrapling[fetchers]>=0.4.9
+requests>=2.31

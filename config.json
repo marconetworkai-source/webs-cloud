@@ -5,13 +5,29 @@
       "leads": {
         "tableId": "tbl8hOlZzU6BGF6Ai",
         "fieldIds": {
+          "Negocio": "fldN9xLEoarVbEZ8Z",
           "Teléfono": "fldkvAaBPOkMcyM36",
-          "Estado": "fldy8mQJxKm8nNjBD"
+          "Ciudad": "fldOT4NXvezwmU3ck",
+          "Nicho": "fldEfm2VCpBNVWJ4L",
+          "Reseñas": "fldkXNQ7wgH0GxVxX",
+          "Nota Google": "fldohhlmpvJ2r4tbQ",
+          "Estado": "fldy8mQJxKm8nNjBD",
+          "Google Maps URL": "fldQOd61YJZ8ze73H",
+          "Notas": "fldDKmstpLMTkHoU8",
+          "Puntuación": "fldJLtgYk5zINH6Ol"
         }
       },
       "proyectos": {
         "tableId": "tblQFU5D40wtU9wMy"
       }
     }
+  },
+  "targets": {
+    "ciudades": ["Valencia", "Madrid", "Sevilla", "Zaragoza", "Málaga"],
+    "nichos": [
+      "Fontanero", "Electricista", "Pintor", "Cerrajero", "Carpintero",
+      "Reformas", "Clínica estética", "Fisioterapia", "Dental",
+      "Academia", "Autoescuela"
+    ]
   }
 }
