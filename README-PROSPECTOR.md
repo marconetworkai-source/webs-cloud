@@ -160,7 +160,8 @@ borra `state/`.
 
 ```bash
 pip install pytest
-pytest -q          # 37 tests: teléfono, scoring, DDG, upsert, cuota, bloqueo, reconciliación
+pytest -q          # 45 tests: teléfono, scoring, DDG, upsert, cuota, bloqueo, reconciliación,
+                   #           estructura de ficha y activación del protocolo de bloqueo
 ```
 
 Los tests cubren toda la lógica sin red (con scraper y DuckDuckGo simulados). La

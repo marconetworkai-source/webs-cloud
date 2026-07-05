@@ -79,6 +79,17 @@ _STOPWORDS = {
     "clinica", "centro", "estudio", "taller", "reformas",
 }
 
+# Términos de nicho NO distintivos: coincidir solo por uno de estos con un dominio
+# es débil (p. ej. 'dental' con 'dentalexpress.es'). No basta para descartar; se
+# conserva el lead y se anota la duda (regla del brief: no descartar en silencio).
+_GENERICOS_NICHO = {
+    "fontanero", "fontaneria", "electricista", "electricidad", "pintor",
+    "pintura", "pinturas", "cerrajero", "cerrajeria", "carpintero",
+    "carpinteria", "reforma", "reformas", "clinica", "estetica", "belleza",
+    "fisioterapia", "fisio", "dental", "dentista", "odontologia", "academia",
+    "autoescuela", "centro", "taller", "estudio", "servicios",
+}
+
 
 @dataclass
 class ResultadoVerificacion:
@@ -197,21 +208,28 @@ def confirmar_sin_web(
         dom = _registered_domain(host)
         if not dom or dom in AGREGADORES:
             continue
-        # Dominio candidato a web propia: ¿comparte token con el negocio?
         etiqueta = dom.split(".")[0]
         etiqueta_tokens = set(_norm_texto(etiqueta).split())
-        solape = tokens & etiqueta_tokens
-        # Coincidencia también si un token del negocio está contenido en la etiqueta.
-        contenido = any(t in etiqueta for t in tokens if len(t) >= 4)
+        distintivos = tokens - _GENERICOS_NICHO
 
-        if solape or contenido:
+        def _casa(conjunto: set) -> bool:
+            return bool(conjunto & etiqueta_tokens) or any(
+                t in etiqueta for t in conjunto if len(t) >= 4
+            )
+
+        # FUERTE: coincide un token DISTINTIVO (nombre propio) -> es su web -> descartar.
+        if distintivos and _casa(distintivos):
             resultado.tiene_web_propia = True
             resultado.dominio_detectado = dom
-            logger.info("Web propia detectada para '%s': %s (solape=%s)",
-                        nombre, dom, solape or "substring")
+            logger.info("Web propia detectada para '%s': %s", nombre, dom)
             return resultado
+        # DÉBIL: solo coincide por término genérico del nicho -> DUDA, se conserva.
+        if _casa(tokens):
+            resultado.dudas.append(f"posible_web_no_confirmada:{dom}")
+            logger.info("Dominio '%s' coincide solo por término genérico con '%s'; "
+                        "conservo el lead y anoto duda.", dom, nombre)
         else:
-            # Dominio no-agregador sin solape claro: duda, no descarta.
+            # Dominio no-agregador sin relación clara: duda, no descarta.
             resultado.dudas.append(f"dominio_ambiguo:{dom}")
 
     return resultado

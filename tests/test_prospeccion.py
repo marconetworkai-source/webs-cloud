@@ -126,6 +126,23 @@ def test_ddg_solo_agregadores_no_descarta():
     assert r.instagram and "instagram.com" in r.instagram
 
 
+def test_ddg_coincidencia_generica_conserva_con_duda():
+    # 'dental' es genérico del nicho: dentalexpress.es NO debe descartar a
+    # 'Clínica Dental Sonrisa' (nombre parcialmente coincidente -> conservar + duda).
+    html = '<a class="result__a" href="https://dentalexpress.es/precios">x</a>'
+    r = confirmar_sin_web("Clínica Dental Sonrisa", "Madrid", _ddg(html))
+    assert r.tiene_web_propia is False
+    assert any("posible_web_no_confirmada" in d for d in r.dudas)
+
+
+def test_ddg_coincidencia_distintiva_si_descarta():
+    # 'sonrisa' es token distintivo: clinicasonrisa.es SÍ es su web -> descartar.
+    html = '<a class="result__a" href="https://clinicasonrisa.es/">x</a>'
+    r = confirmar_sin_web("Clínica Dental Sonrisa", "Madrid", _ddg(html))
+    assert r.tiene_web_propia is True
+    assert r.dominio_detectado == "clinicasonrisa.es"
+
+
 def test_ddg_dominio_ambiguo_conserva_con_duda():
     # dominio no-agregador sin relación de nombre -> se conserva, con duda anotada
     html = '''

@@ -124,7 +124,8 @@ class MapsScraper:
 
     def __init__(self, visible: bool = False) -> None:
         self.visible = visible
-        self._session = None
+        self._session = None       # objeto con .fetch (lo que devuelve __enter__)
+        self._session_cm = None    # el context manager sobre el que llamar __exit__
         self._fallos_consecutivos = 0
 
     def __enter__(self) -> "MapsScraper":
@@ -132,7 +133,7 @@ class MapsScraper:
 
         logger.info("Abriendo sesión stealth (headless=%s, perfil=%s)",
                     not self.visible, PERFIL_DIR)
-        self._session = StealthySession(
+        self._session_cm = StealthySession(
             headless=not self.visible,
             user_data_dir=PERFIL_DIR,       # perfil persistente -> cookies de consent
             max_pages=1,                    # una sola pestaña
@@ -141,14 +142,16 @@ class MapsScraper:
             block_webrtc=True,
             disable_resources=False,
         )
-        # Algunas versiones exponen start(); el context manager lo hace por dentro.
-        self._session.__enter__()
+        # __enter__ arranca el navegador y devuelve el objeto con .fetch (self en la
+        # mayoría de versiones); usamos su valor de retorno por robustez.
+        entrada = self._session_cm.__enter__()
+        self._session = entrada if entrada is not None else self._session_cm
         return self
 
     def __exit__(self, *exc) -> None:
-        if self._session is not None:
+        if self._session_cm is not None:
             try:
-                self._session.__exit__(*exc)
+                self._session_cm.__exit__(*exc)
             except Exception as e:  # noqa: BLE001
                 logger.warning("Error cerrando la sesión stealth: %s", e)
 
@@ -259,14 +262,23 @@ class MapsScraper:
             f"{quote(nicho)}+en+{quote(ciudad)}?hl=es"
         )
         logger.info("Buscando: %s en %s -> %s", nicho, ciudad, url)
-        resp = self._session.fetch(
-            url,
-            page_action=self._accion_resultados,
-            wait_selector=SEL_FEED,
-            wait_selector_state="visible",
-            load_dom=True,
-            timeout=60000,
-        )
+        try:
+            resp = self._session.fetch(
+                url,
+                page_action=self._accion_resultados,
+                wait_selector=SEL_FEED,
+                wait_selector_state="visible",
+                load_dom=True,
+                timeout=60000,
+            )
+        except Exception as exc:  # noqa: BLE001
+            # Si la página de resultados no carga (p. ej. el feed nunca aparece),
+            # tratamos como posible bloqueo: activa el protocolo (checkpoint +
+            # espera + un reintento) en vez de reventar el run. Regla del brief:
+            # ante la duda, parar con checkpoint; nunca martillear.
+            raise BloqueoDetectado(
+                f"fetch de resultados falló ({type(exc).__name__}: {exc})"
+            ) from exc
         self._nota_bloqueo_o_sigue(resp, "resultados")
         cards = self._extraer_tarjetas(resp)
         logger.info("  %d tarjetas leídas (%s en %s).", len(cards), nicho, ciudad)
@@ -404,12 +416,19 @@ class MapsScraper:
             self._registrar_fallo_ficha()
             return None
 
-        resp = self._session.fetch(
-            card.place_url,
-            page_action=self._esperar_ficha,
-            load_dom=True,
-            timeout=45000,
-        )
+        try:
+            resp = self._session.fetch(
+                card.place_url,
+                page_action=self._esperar_ficha,
+                load_dom=True,
+                timeout=45000,
+            )
+        except Exception as exc:  # noqa: BLE001
+            # Fetch de ficha fallido = sin estructura -> cuenta para el contador de
+            # bloqueo (3 seguidos -> BloqueoDetectado). No se inventa nada.
+            logger.warning("Fetch de ficha '%s' falló: %s", card.nombre, exc)
+            self._registrar_fallo_ficha()
+            return None
         self._nota_bloqueo_o_sigue(resp, f"ficha:{card.nombre}")
 
         telefono = self._extraer_telefono(resp)
@@ -420,11 +439,17 @@ class MapsScraper:
         if card.metodo_extraccion == "json":
             dudas.append("tarjeta_via_json_baja_confianza")
 
-        if telefono is None:
-            logger.info("Ficha '%s': sin teléfono extraíble.", card.nombre)
-            self._registrar_fallo_ficha()
+        # Distinguir 'sin estructura' (posible bloqueo) de 'sin teléfono' (negocio
+        # legítimo sin tel publicado). Solo lo primero alimenta el contador de
+        # bloqueo; así 3 negocios seguidos sin teléfono NO provocan un falso bloqueo.
+        if self._ficha_tiene_estructura(resp, telefono):
+            self._fallos_consecutivos = 0
+            if telefono is None:
+                logger.info("Ficha '%s': estructura OK pero sin teléfono publicado.",
+                            card.nombre)
         else:
-            self._fallos_consecutivos = 0  # éxito -> resetea contador de bloqueo
+            logger.info("Ficha '%s': sin estructura reconocible.", card.nombre)
+            self._registrar_fallo_ficha()
 
         return Candidato(
             nombre=card.nombre, ciudad=ciudad, nicho=nicho,
@@ -439,6 +464,22 @@ class MapsScraper:
             raise BloqueoDetectado(
                 "3 fichas consecutivas sin estructura esperada (posible bloqueo)."
             )
+
+    @staticmethod
+    def _ficha_tiene_estructura(resp, telefono: Optional[str]) -> bool:
+        """¿La ficha se cargó con estructura reconocible? Un teléfono o un título
+        (h1) o un bloque de detalle conocido bastan. Sirve para no confundir un
+        negocio sin teléfono publicado con una página bloqueada/vacía."""
+        if telefono is not None:
+            return True
+        for sel in ("h1", 'div[role="main"]', 'button[data-item-id^="address"]',
+                    'div[role="region"]'):
+            try:
+                if _primero(resp.css(sel)) is not None:
+                    return True
+            except Exception:  # noqa: BLE001
+                continue
+        return False
 
     def _extraer_telefono(self, resp) -> Optional[str]:
         # (a) data-item-id="phone:tel:+34..." — lo más fiable
